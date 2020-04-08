@@ -1,0 +1,48 @@
+#!/bin/bash
+
+date=`date +"%F %T"`
+email=user@email.com
+SystemMountPoint="/"
+minFreeSpace=4096
+LimitFolders=365
+LOG="/var/log/hddmon.log"
+path_monitor="/var/spool/asterisk/monitor/"
+
+# вычисления
+#/dev/mapper/centos_centos-root xfs 39626 33201 6426 84% /
+MountPointInfo=$(/bin/df -Tm $SystemMountPoint 2>/dev/null | tail -n 1 | awk '{ print $5 }');
+
+#echo $MountPointInfoG | awk '{ print $0 }'
+#/dev/mapper/centos_centos-root 39G 33G 6,3G 84% /
+# для email
+MountPointInfoG=$(/bin/df -h $SystemMountPoint 2>/dev/null | tail -n 1);
+MountPointFreeSpaceG=( \
+$(echo $MountPointInfoG | awk '{ print $2 }') \
+$(echo $MountPointInfoG | awk '{ print $3 }') \
+$(echo $MountPointInfoG | awk '{ print $4 }') \
+$(echo $MountPointInfoG | awk '{ print $5 }') \
+);
+
+size_monitor=$(du -h -d2 $path_monitor | sort -k2)
+
+CountFolders=$(find $path_monitor -mindepth 3 -maxdepth 3 -type d | grep '20[12][0-9]' | wc -l)
+DelFolders=$(find $path_monitor -mindepth 3 -maxdepth 3 -type d | grep '20[12][0-9]' | sort -k2 | head -n -$LimitFolders)
+
+# Если сободного места меньше 3 Gb, то отправляем письмо на e-mail.
+if [ $MountPointInfo -lt $minFreeSpace ]; then
+echo -e "Уже использовано ${MountPointFreeSpaceG[1]} (${MountPointFreeSpaceG[3]}) из ${MountPointFreeSpaceG[0]}\nСвободно ${MountPointFreeSpaceG[2]} что меньше необходимого минимума $minFreeSpace MB\n\nРазмер даректории записей разг
+fi
+
+#Если количество директорий в ./spool/monitor больше 400 то самую старую удалить
+if [ $CountFolders -gt $LimitFolders ]; then
+echo -e "\n[`date +'%F %T'`]\tколичество дней с записями $CountFolders, что больше $LimitFolders" >> $LOG
+echo -e "[`date +'%F %T'`]\tсписок удаляемых директорий:" >> $LOG
+echo -e "[`date +'%F %T'`]\t$DelFolders" >> $LOG
+for i in $DelFolders; do
+    mkdir -p /srv/backup_monitor
+    mv $i /srv/backup_monitor
+    #rm -fr $i
+done
+else
+    echo -e "\n[`date +'%F %T'`]\t количество дней с записями $CountFolders; лимит директорий $LimitFolders" >> $LOG
+fi
